@@ -18,11 +18,16 @@ public class User {
 
     public int cloudlet_count;
     public int cloudlets_desired;
+    public double total_processing_time_self;
+    public double total_processing_time_others;
+    public int cloudlets_processed;
 
     public User(String username_in, int id_in) {
         username = username_in;
         id = id_in;
         friends = new ArrayList<User>();
+        total_processing_time_self = 0;
+        cloudlets_processed = 0;
     }
 
     public void make_friend(User friend)

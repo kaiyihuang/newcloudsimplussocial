@@ -7,9 +7,7 @@ import org.cloudbus.cloudsim.selectionpolicies.VmSelectionPolicy;
 import org.cloudbus.cloudsim.vms.Vm;
 import org.cloudbus.cloudsim.vms.VmSocial;
 
-import java.util.Comparator;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -111,6 +109,7 @@ public class VmAllocationPolicyMigrationSocialCredit extends VmAllocationPolicyM
             .min(comparingDouble(Host::getCpuPercentUtilization))
             .orElse(Host.NULL);
     }
+
 
     @Override
     protected Optional<Host> findHostForVmInternal(final Vm vm, final Predicate<Host> predicate) {

@@ -10,6 +10,13 @@ public class CloudletSocial extends CloudletSimple {
 	public int socialId;
 	public User owner;
 	public int securityLevel;
+    public double scrappyStartTime;
+    public double scrappyEndTime;
+    public double scrappyTotalTime;
+
+    public void calcTotalTime(){
+        scrappyTotalTime = scrappyEndTime - scrappyStartTime;
+    }
 
 	public CloudletSocial(final long length, final int pesNumber, final UtilizationModel utilizationModel,
                           final int social_id,
