@@ -68,9 +68,8 @@ import static java.util.stream.Collectors.joining;
  * <p>
  * Despite there isn't the concept of multi-cloud environments on CloudSim Plus,
  * this example can be used to simulate that.
- * If you consider you have 2 or more datacenters where some of them belong to a cloud provider
+ * Lets say you have 2 or more datacenters where some of them belong to a cloud provider
  * and other ones belong to another provider.
- *
  * Since the example is performing VM migration between those datacenters,
  * we can consider in that case we are performing VM migration between
  * cloud providers.
@@ -241,7 +240,7 @@ public final class InterDatacenterMigration1 {
         simulation.start();
 
         printResults();
-        System.out.println(getClass().getSimpleName() + " finished!");
+        System.out.printf("%n%s finished!%n", getClass().getSimpleName());
     }
 
     private void validateConfiguration() {
@@ -296,15 +295,15 @@ public final class InterDatacenterMigration1 {
                     .thenComparingLong(c -> c.getVm().getId());
             cloudletFinishedList.sort(cloudletComparator);
             new CloudletsTableBuilder(cloudletFinishedList).setTitle(broker.toString()).build();
-            System.out.printf("Number of VM migrations: %d%n", migrationsNumber);
         }
 
+        System.out.printf("%nNumber of VM migrations: %d%n", migrationsNumber);
         printHostStateHistory();
     }
 
     private void printHostStateHistory() {
         System.out.printf(
-            "%nHosts CPU usage History (when the allocated MIPS is lower than the requested, it is due to VM migration overhead)%n");
+            "%nHosts CPU usage History (when allocated MIPS is lower than requested one, it is due to VM migration overhead)");
         datacenterList.stream()
                       .map(Datacenter::getHostList).flatMap(List::stream)
                       .filter(h -> !h.getStateHistory().isEmpty())

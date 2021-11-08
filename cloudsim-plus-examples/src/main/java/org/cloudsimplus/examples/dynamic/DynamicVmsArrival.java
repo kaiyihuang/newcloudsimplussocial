@@ -23,7 +23,6 @@
  */
 package org.cloudsimplus.examples.dynamic;
 
-import org.cloudbus.cloudsim.allocationpolicies.VmAllocationPolicySimple;
 import org.cloudbus.cloudsim.brokers.DatacenterBroker;
 import org.cloudbus.cloudsim.brokers.DatacenterBrokerSimple;
 import org.cloudbus.cloudsim.cloudlets.Cloudlet;
@@ -33,12 +32,8 @@ import org.cloudbus.cloudsim.datacenters.Datacenter;
 import org.cloudbus.cloudsim.datacenters.DatacenterSimple;
 import org.cloudbus.cloudsim.hosts.Host;
 import org.cloudbus.cloudsim.hosts.HostSimple;
-import org.cloudbus.cloudsim.provisioners.PeProvisionerSimple;
-import org.cloudbus.cloudsim.provisioners.ResourceProvisionerSimple;
 import org.cloudbus.cloudsim.resources.Pe;
 import org.cloudbus.cloudsim.resources.PeSimple;
-import org.cloudbus.cloudsim.schedulers.vm.VmSchedulerSpaceShared;
-import org.cloudbus.cloudsim.utilizationmodels.UtilizationModel;
 import org.cloudbus.cloudsim.utilizationmodels.UtilizationModelDynamic;
 import org.cloudbus.cloudsim.utilizationmodels.UtilizationModelFull;
 import org.cloudbus.cloudsim.vms.Vm;
@@ -77,7 +72,7 @@ public class DynamicVmsArrival {
 
     /** Number of Cloudlets to create simultaneously. */
     private static final int CLOUDLETS = VMS;
-    /** The length of each Cloudlet in number of Million Instructions (MI)*/
+    /** The length of each Cloudlet in number of Million Instructions (MI) */
     private static final int CLOUDLET_LENGTH = 10000;
     private static final int CLOUDLET_PES = 1;
 
@@ -91,7 +86,7 @@ public class DynamicVmsArrival {
      * when the creation of new VMs will be requested (in seconds).
      * After at that time, there will be suitable Hosts available.
      */
-    private static final double EXPECTED_CLOUDLET_FINISH_TIME = CLOUDLET_LENGTH/HOST_MIPS + IDLE_VM_DESTRUCTION_DELAY + 1;
+    private static final double EXPECTED_CLOUDLET_FINISH_TIME = CLOUDLET_LENGTH / HOST_MIPS + IDLE_VM_DESTRUCTION_DELAY + 1;
 
     private final List<Host> hostList;
     private final List<Vm> vmList;
@@ -141,31 +136,33 @@ public class DynamicVmsArrival {
      * Creates a broker defining that idle VMs will be destructed after some delay,
      * instead of waiting the broker to shutdown to destroy them.
      * This enables freeing Hosts to place new VMs.
+     *
      * @return
      */
     private DatacenterBroker createBroker() {
-        DatacenterBroker broker = new DatacenterBrokerSimple(simulation);
+        final var broker = new DatacenterBrokerSimple(simulation);
         broker.setVmDestructionDelay(IDLE_VM_DESTRUCTION_DELAY);
         return broker;
     }
 
     private void runSimulationAndPrintResults() {
         simulation.start();
-        List<Cloudlet> cloudlets = broker.getCloudletFinishedList();
-        cloudlets.sort(Comparator.comparingLong(Cloudlet::getId));
-        new CloudletsTableBuilder(cloudlets).build();
+        final var cloudletList = broker.getCloudletFinishedList();
+        cloudletList.sort(Comparator.comparingLong(Cloudlet::getId));
+        new CloudletsTableBuilder(cloudletList).build();
     }
 
     /**
      * Creates and submits a list of VMs and Cloudlets.
+     *
      * @param submissionDelay the time to wait before requesting the VM creation
      */
     private void createdAndSubmitVmsAndCloudlets(final double submissionDelay) {
-        final List<Vm> vms = createAndSubmitVms(submissionDelay);
-        this.vmList.addAll(vms);
-        this.cloudletList.addAll(createAndSubmitCloudlets(vms));
+        final var newVmList = createAndSubmitVms(submissionDelay);
+        this.vmList.addAll(newVmList);
+        this.cloudletList.addAll(createAndSubmitCloudlets(newVmList));
 
-        if(submissionDelay == 0) {
+        if (submissionDelay == 0) {
             System.out.printf("# Submitting %d VMs at the beginning of the simulation.%n", VMS);
             System.out.printf("# Submitting %d Cloudlets at the beginning of the simulation.%n", CLOUDLETS);
         } else {
@@ -177,17 +174,18 @@ public class DynamicVmsArrival {
 
     /**
      * Creates and submits a list of VMs.
+     *
      * @param submissionDelay the time to wait before requesting the VM creation
      * @return
      */
     private List<Vm> createAndSubmitVms(final double submissionDelay) {
-        final List<Vm> vms = new ArrayList<>(VMS);
+        final var newVmList = new ArrayList<Vm>(VMS);
         for (int i = 0; i < VMS; i++) {
-            vms.add(createVm(submissionDelay));
+            newVmList.add(createVm(submissionDelay));
         }
 
-        broker.submitVmList(vms);
-        return vms;
+        broker.submitVmList(newVmList);
+        return newVmList;
     }
 
     /**
@@ -197,32 +195,33 @@ public class DynamicVmsArrival {
      * @return the created VM
      */
     private Vm createVm(final double submissionDelay) {
-        int mips = 1000;
-        long size = 10000; // image size (Megabyte)
-        int ram = 512; // vm memory (Megabyte)
-        long bw = 1000;
+        final int mips = 1000;
+        final long size = 10000; // image size (Megabyte)
+        final int ram = 512; // vm memory (Megabyte)
+        final long bw = 1000;
 
-        Vm vm = new VmSimple(mips, VM_PES);
+        final var vm = new VmSimple(mips, VM_PES);
         vm.setRam(ram)
-            .setBw(bw)
-            .setSize(size)
-            .setSubmissionDelay(submissionDelay);
+          .setBw(bw)
+          .setSize(size)
+          .setSubmissionDelay(submissionDelay);
         return vm;
     }
 
     /**
      * Creates one Cloudlet for each VM in the given List.
+     *
      * @param vms the List fo VMs to create Cloudlets to
      * @return the List of Cloudlets
      */
     private List<Cloudlet> createAndSubmitCloudlets(final List<Vm> vms) {
-        final List<Cloudlet> cloudlets = new ArrayList<>(CLOUDLETS);
-        for (Vm vm : vms) {
-            cloudlets.add(createCloudlet(vm));
+        final var newCloudletList = new ArrayList<Cloudlet>(CLOUDLETS);
+        for (final Vm vm : vms) {
+            newCloudletList.add(createCloudlet(vm));
         }
 
-        broker.submitCloudletList(cloudlets);
-        return cloudlets;
+        broker.submitCloudletList(newCloudletList);
+        return newCloudletList;
     }
 
     /**
@@ -231,16 +230,15 @@ public class DynamicVmsArrival {
      * @param vm vm to run the cloudlet
      * @return the created cloudlet
      */
-    private Cloudlet createCloudlet(Vm vm) {
-        UtilizationModel utilizationModelFull = new UtilizationModelFull();
-        UtilizationModel utilizationModelDynamic = new UtilizationModelDynamic(0.2);
-        Cloudlet cloudlet = new CloudletSimple(CLOUDLET_LENGTH, CLOUDLET_PES)
+    private Cloudlet createCloudlet(final Vm vm) {
+        final var utilizationModelFull = new UtilizationModelFull();
+        final var utilizationModelDynamic = new UtilizationModelDynamic(0.2);
+
+        return new CloudletSimple(CLOUDLET_LENGTH, CLOUDLET_PES)
             .setUtilizationModelCpu(utilizationModelFull)
             .setUtilizationModelRam(utilizationModelDynamic)
             .setUtilizationModelBw(utilizationModelDynamic)
             .setVm(vm);
-
-        return cloudlet;
     }
 
     /**
@@ -250,32 +248,26 @@ public class DynamicVmsArrival {
      */
     private Datacenter createDatacenter() {
         for (int i = 0; i < HOSTS; i++) {
-            Host host = createHost(i);
-            hostList.add(host);
+            hostList.add(createHost());
         }
 
-        return new DatacenterSimple(simulation, hostList, new VmAllocationPolicySimple());
+        return new DatacenterSimple(simulation, hostList);
     }
 
     /**
      * Creates a host with pre-defined configuration.
      *
-     * @param id The Host id
      * @return the created host
      */
-    private Host createHost(int id) {
-        List<Pe> peList = new ArrayList<>();
-        for(int i = 0; i < HOST_PES; i++){
-            peList.add(new PeSimple(HOST_MIPS, new PeProvisionerSimple()));
+    private Host createHost() {
+        final var peList = new ArrayList<Pe>();
+        for (int i = 0; i < HOST_PES; i++) {
+            peList.add(new PeSimple(HOST_MIPS));
         }
         long ram = 2048; // host memory (Megabyte)
         long storage = 1000000; // host storage (Megabyte)
         long bw = 10000; //Megabits/s
 
-       return new HostSimple(ram, bw, storage, peList)
-           .setRamProvisioner(new ResourceProvisionerSimple())
-           .setBwProvisioner(new ResourceProvisionerSimple())
-            .setVmScheduler(new VmSchedulerSpaceShared());
-
+        return new HostSimple(ram, bw, storage, peList);
     }
 }
