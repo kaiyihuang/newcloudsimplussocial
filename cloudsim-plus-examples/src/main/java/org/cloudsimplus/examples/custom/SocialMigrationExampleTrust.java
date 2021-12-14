@@ -62,6 +62,7 @@ import org.cloudsimplus.listeners.*;
 import org.cloudsimplus.listeners.EventListener;
 import org.cloudsimplus.util.Log;
 
+import java.io.IOException;
 import java.util.*;
 
 import static java.util.Comparator.comparingLong;
@@ -176,12 +177,12 @@ public final class SocialMigrationExampleTrust {
      */
     private static final int    HOST_PES[] = {2, 3, 5, 4, 5, 5, 4, 5, 5, 4};
 
-    private static final int    VM_PES[]   = {2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 2, 2 , 2, 2, 2, 1};
+    private static final int    VM_PES[]   = {2, 2, 2, 1};
     private static final int    VM_PE_STATIC = 1;
     private static final int    VM_MIPS = 1000; //for each PE
     private static final long   VM_SIZE = 1000; //image size (MB)
     private static final int    VM_RAM = 10_000; //VM memory (MB)
-    private static final double VM_BW = HOST_BW/(double)VM_PES.length;
+    private static final double VM_BW = HOST_BW/5f; //HOST_BW/(double)VM_PES.length;
 
     private static final long   CLOUDLET_LENGTH = 20_000;
     private static final long   CLOUDLET_FILESIZE = 300;
@@ -230,7 +231,7 @@ public final class SocialMigrationExampleTrust {
 
     private int overloadedHosts = 0;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         new SocialMigrationExampleTrust();
     }
 
@@ -322,7 +323,7 @@ public final class SocialMigrationExampleTrust {
         }
     }
 
-    private SocialMigrationExampleTrust(){
+    private SocialMigrationExampleTrust() throws IOException {
         Log.setLevel(Level.INFO);
 
         generateUsers();
@@ -352,6 +353,7 @@ public final class SocialMigrationExampleTrust {
 
         simulation.start();
 
+
         final List<Cloudlet> finishedList = broker.getCloudletFinishedList();
         final Comparator<Cloudlet> cloudletComparator =
             comparingLong((Cloudlet c) -> c.getVm().getHost().getId())
@@ -360,13 +362,14 @@ public final class SocialMigrationExampleTrust {
         new CloudletsTableBuilder(finishedList).build();
 
         System.out.printf("%nHosts CPU usage History (when the allocated MIPS is lower than the requested, it is due to VM migration overhead)%n");
-        hostList.stream().filter(h -> h.getId() <= 2).forEach(this::printHostStateHistory);
+        //hostList.stream().filter(h -> h.getId() <= 2).forEach(this::printHostStateHistory);
 
         System.out.printf("%nHosts Power Consumption Total%n");
 
         double[] powerList = new double[100];
         double[] timeList = new double[100];
         double totalProcessingTime = 0;
+        double totalHangingTime = 0;
 
         for (int i=0;i<100;i++){
             var temp = meterList.get(i);
@@ -380,17 +383,32 @@ public final class SocialMigrationExampleTrust {
             System.out.println("Host ProcessedTime/Clds Processed "+i + " : " + full_user_list.get(i).total_processing_time_self
                 /full_user_list.get(i).cloudlets_processed);
             powerList[i] = pm.getTotalPower()/full_user_list.get(i).cloudlet_count;
-            timeList[i] = full_user_list.get(i).total_processing_time_self
+            timeList[i] = full_user_list.get(i).total_hanging_time
                 /full_user_list.get(i).cloudlets_processed;
             totalProcessingTime += full_user_list.get(i).total_processing_time_self;
+            totalHangingTime += full_user_list.get(i).total_hanging_time;
         }
         System.out.println("Standard Deviation of Power/Cloudlets (Price) Sent: "+calculateSD(powerList));
         System.out.println("Standard Deviation of SelfTime/Cloudlets Processed (Reward):"+calculateSD(timeList));
         System.out.println("Total amount of overloaded hosts: "+ this.allocationPolicy.totalHostsOverloaded);
         System.out.println("Total Processing Time of Cloudlets: "+ totalProcessingTime);
+        System.out.println("Total Time Cloudlets spent in system: " + totalHangingTime);
+        System.out.println("Total Cloudlets processed: " + finishedList.size());
+        System.out.println("Total Cloudlets created: " + broker.getCloudletCreatedList().size());
 
         System.out.printf("Number of VM migrations: %d%n", migrationsNumber);
         System.out.println(getClass().getSimpleName() + " finished!");
+        outputCSV(powerList, timeList);
+    }
+
+    public void outputCSV(double[] powerList, double[] timeList) throws IOException {
+        List<String[]> dataLines = new ArrayList<>();
+        dataLines.add(new String[]
+            { "Power/Cloudlets Sent", "Processing Time/Cloudlets Consumed" });
+        for(int i=0;i<100;i++){
+            dataLines.add(new String[]{String.valueOf(powerList[i]), String.valueOf(timeList[i])});
+        }
+        User.createCSVFile(dataLines, "SocialCreditOutput.csv");
     }
 
     /**
@@ -402,7 +420,8 @@ public final class SocialMigrationExampleTrust {
     private void algoClockTickListener(EventInfo info) {
         if(info.getTime() % 10 == 0){
             for(Host targetHost: hostList){
-                if( ((HostSocial)targetHost).owner.social_credit < 0 && targetHost.getCpuPercentUtilization() < 0.30){
+                if( ((HostSocial)targetHost).owner.social_credit < 0 && targetHost.getCpuPercentUtilization() < 0.30 &&
+                    targetHost.getVmsMigratingIn().isEmpty()){
                     Optional<Host> sourceHost = hostList.stream()
                         .max(Comparator.comparingInt(host -> ((HostSocial)host).getOwnerSocialCredit() ));
                     Host trueSourceHost;
@@ -421,8 +440,12 @@ public final class SocialMigrationExampleTrust {
                     else
                         trueSourceVm = sourceVm.get();
 
-                    System.out.printf("%n# Requesting the social credit migration of %s to %s%n%n", trueSourceVm, targetHost);
-                    datacenter0.requestVmMigration(trueSourceVm, targetHost);
+                    if(targetHost.isSuitableForVm(trueSourceVm))
+                    {
+                        System.out.printf("%n# Requesting the social credit migration of %s to %s%n%n", trueSourceVm, targetHost);
+                        datacenter0.requestVmMigration(trueSourceVm, targetHost);
+                    }
+
                 }
             }
         }
@@ -513,14 +536,16 @@ public final class SocialMigrationExampleTrust {
 
 
     public void createAndSubmitCloudletsPerUser() {
+        Random random3 = new Random(STATIC_SEED);
         for(User u: full_user_list)
         {
-            u.cloudlets_desired = random2.nextInt(CLOUDLETS_RANGE_MAX) + CLOUDLETS_RANGE_MIN;
-            createAndSubmitOneCloudlet(u, random2.nextInt(SEC_LEVEL_MAX)+SEC_LEVEL_MIN);
+            u.cloudlets_desired = random3.nextInt(CLOUDLETS_RANGE_MAX) + CLOUDLETS_RANGE_MIN;
+            createAndSubmitOneCloudlet(u, random3.nextInt(SEC_LEVEL_MAX)+SEC_LEVEL_MIN);
         }
     }
 
     private void createAndSubmitOneCloudlet(User owned, int securityLevel) {
+        Random random3 = new Random(STATIC_SEED);
         final int id = cloudletList.size();
         final long length = 10000; //in number of Million Instructions (MI)
         final int pesNumber = 1; //Each cloudlet represents part of a job
@@ -528,8 +553,8 @@ public final class SocialMigrationExampleTrust {
         UtilizationModelDynamic um = createCpuUtilizationModel(CLOUDLET_INITIAL_CPU_PERCENTAGE, 1);
 
         Cloudlet cloudlet = new CloudletSocial(CLOUDLET_LENGTH, pesNumber, owned)
-            .setFileSize(CLOUDLET_FILESIZE+random2.nextInt(300))
-            .setOutputSize(CLOUDLET_OUTPUTSIZE+random2.nextInt(300))
+            .setFileSize(CLOUDLET_FILESIZE)
+            .setOutputSize(CLOUDLET_OUTPUTSIZE)
             .setUtilizationModelRam(utilizationModelFull)
             .setUtilizationModelBw(utilizationModelFull)
             .setUtilizationModelCpu(um);
@@ -541,24 +566,29 @@ public final class SocialMigrationExampleTrust {
         if(owned.cloudlet_count < owned.cloudlets_desired){
             cloudlet.addOnFinishListener(info -> {
                 System.out.printf("\t# %.2f: Requesting creation of new Cloudlet after %s finishes executing.%n", info.getTime(), info.getCloudlet());
-                createAndSubmitOneCloudlet(owned, random2.nextInt(SEC_LEVEL_MAX)+SEC_LEVEL_MIN);
+                createAndSubmitOneCloudlet(owned, random3.nextInt(SEC_LEVEL_MAX)+SEC_LEVEL_MIN);
             });
         }
         cloudlet.addOnStartListener(credit -> {
-                ((CloudletSocial) cloudlet).owner.social_credit -= 1;
-                ((HostSocial)(cloudlet.getVm().getHost())).owner.social_credit += 1;
                 ((CloudletSocial) cloudlet).scrappyStartTime = datacenter0.getSimulation().clock();
+
             }
         );
         cloudlet.addOnFinishListener(
             time -> {
+                ((CloudletSocial) cloudlet).owner.social_credit -= 1;
+                ((HostSocial)(cloudlet.getVm().getHost())).owner.social_credit += 1;
                 ((CloudletSocial) cloudlet).scrappyEndTime = datacenter0.getSimulation().clock();
                 ((CloudletSocial) cloudlet).calcTotalTime();
+                ((CloudletSocial) cloudlet).reallyCalcTotalTime();
                 ((CloudletSocial) cloudlet).owner.total_processing_time_self += ((CloudletSocial) cloudlet).scrappyTotalTime;
                 ((HostSocial)(cloudlet.getVm().getHost())).owner.cloudlets_processed += 1;
+                ((CloudletSocial) cloudlet).owner.total_hanging_time += ((CloudletSocial) cloudlet).regularTotalTime;
+                ((CloudletSocial) cloudlet).owner.total_processing_time_true += cloudlet.getActualCpuTime();
             }
         );
 
+        ((CloudletSocial)cloudlet).submissionTime = datacenter0.getSimulation().clock();
         broker.submitCloudlet(cloudlet);
         ((CloudletSocial)cloudlet).owner.cloudlet_count += 1;
     }
@@ -600,9 +630,10 @@ public final class SocialMigrationExampleTrust {
     }
 
     public Vm createVm(final int pes) {
+        Random random3 = new Random(STATIC_SEED);
         Vm vm = new VmSocial(VM_MIPS, pes);
         vm
-            .setRam(VM_RAM+random2.nextInt(5000)).setBw((long)VM_BW).setSize(VM_SIZE)
+            .setRam(VM_RAM+random3.nextInt(5000)).setBw((long)VM_BW).setSize(VM_SIZE)
             .setCloudletScheduler(new CloudletSchedulerSpaceShared());
         ((VmSocial)vm).owner = special_user;
         ((VmSocial)vm).securityLevel = 99;
@@ -693,7 +724,7 @@ public final class SocialMigrationExampleTrust {
         final List<Host> list = new ArrayList<>(HOST_PES.length);
         for (int i = 0; i < USER_SIZE; i++) {
             final int pes = HOST_PES[1];
-            final long ram = 500_000;
+            final long ram = 60000;
             Host temp = createHost(pes, ram);
             temp.setPowerModel(new PowerModelHostSimple(140.0, 1.0));
             ((HostSocial)temp).owner = full_user_list.get(i);

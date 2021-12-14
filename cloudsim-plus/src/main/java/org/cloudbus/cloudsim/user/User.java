@@ -1,9 +1,15 @@
 package org.cloudbus.cloudsim.user;
 import org.cloudbus.cloudsim.hosts.Host;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class User {
     public String username;
@@ -19,14 +25,41 @@ public class User {
     public int cloudlet_count;
     public int cloudlets_desired;
     public double total_processing_time_self;
-    public double total_processing_time_others;
+    public double total_processing_time_true;
+    public double total_hanging_time;
     public int cloudlets_processed;
+
+    public static String convertToCSV(String[] data) {
+        return Stream.of(data)
+            .map(User::escapeSpecialCharacters)
+            .collect(Collectors.joining(","));
+    }
+
+    public static String escapeSpecialCharacters(String data) {
+        String escapedData = data.replaceAll("\\R", " ");
+        if (data.contains(",") || data.contains("\"") || data.contains("'")) {
+            data = data.replace("\"", "\"\"");
+            escapedData = "\"" + data + "\"";
+        }
+        return escapedData;
+    }
+
+    public static void createCSVFile(List<String[]> dataLines, String filename) throws IOException {
+        File csvOutputFile = new File(filename);
+        try (PrintWriter pw = new PrintWriter(csvOutputFile)) {
+            dataLines.stream()
+                .map(User::convertToCSV)
+                .forEach(pw::println);
+        }
+    }
+
 
     public User(String username_in, int id_in) {
         username = username_in;
         id = id_in;
         friends = new ArrayList<User>();
         total_processing_time_self = 0;
+        total_processing_time_true = 0;
         cloudlets_processed = 0;
     }
 

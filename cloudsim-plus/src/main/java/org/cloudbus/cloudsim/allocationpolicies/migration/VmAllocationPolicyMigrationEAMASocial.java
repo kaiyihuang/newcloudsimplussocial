@@ -464,7 +464,8 @@ public class VmAllocationPolicyMigrationEAMASocial extends VmAllocationPolicyAbs
         }
         underloadedHostsList.clear();
         underloadedHostsList.addAll(this.getUnderloadedHosts());
-        underloadedHostsList.sort(Comparator.comparingDouble(Host::getCpuMipsUtilization));
+        //underloadedHostsList.sort(Comparator.comparingDouble(Host::getCpuMipsUtilization));
+        underloadedHostsList.sort(Comparator.comparingInt(host -> ((HostSocial)host).owner.friends.size()));
         var RemOverloadedHosts = overloadedHosts.size();
         List <Host> normalList = new ArrayList<Host>();
         Collections.reverse(underloadedHostsList);

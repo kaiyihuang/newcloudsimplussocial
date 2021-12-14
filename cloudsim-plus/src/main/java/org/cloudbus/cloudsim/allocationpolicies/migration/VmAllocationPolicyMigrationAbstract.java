@@ -51,6 +51,9 @@ import static java.util.stream.Collectors.*;
 public abstract class VmAllocationPolicyMigrationAbstract extends VmAllocationPolicyAbstract implements VmAllocationPolicyMigration {
     public static final double DEF_UNDERLOAD_THRESHOLD = 0.35;
 
+    /** Custom Metric */
+    public int totalHostsOverloaded = 0;
+
     /** @see #getUnderUtilizationThreshold() */
     private double underUtilizationThreshold;
 
@@ -127,6 +130,7 @@ public abstract class VmAllocationPolicyMigrationAbstract extends VmAllocationPo
         final Set<Host> overloadedHosts = getOverloadedHosts();
         this.hostsOverloaded = !overloadedHosts.isEmpty();
         printOverUtilizedHosts(overloadedHosts);
+        totalHostsOverloaded += overloadedHosts.size();
 
         final Map<Vm, Host> migrationMap = getMigrationMapFromOverloadedHosts(overloadedHosts);
         updateMigrationMapFromUnderloadedHosts(overloadedHosts, migrationMap);

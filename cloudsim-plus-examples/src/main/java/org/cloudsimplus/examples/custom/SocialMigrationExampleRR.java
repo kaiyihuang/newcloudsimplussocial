@@ -24,7 +24,10 @@
 package org.cloudsimplus.examples.custom;
 
 import ch.qos.logback.classic.Level;
-import org.cloudbus.cloudsim.allocationpolicies.migration.*;
+import org.cloudbus.cloudsim.allocationpolicies.migration.VmAllocationPolicyMigrationBestFitSocial;
+import org.cloudbus.cloudsim.allocationpolicies.migration.VmAllocationPolicyMigrationBestFitStaticThreshold;
+import org.cloudbus.cloudsim.allocationpolicies.migration.VmAllocationPolicyMigrationRoundRobinSocial;
+import org.cloudbus.cloudsim.allocationpolicies.migration.VmAllocationPolicyMigrationStaticThreshold;
 import org.cloudbus.cloudsim.brokers.DatacenterBroker;
 import org.cloudbus.cloudsim.brokers.DatacenterBrokerFirstFitSocial;
 import org.cloudbus.cloudsim.cloudlets.Cloudlet;
@@ -44,7 +47,6 @@ import org.cloudbus.cloudsim.resources.PeSimple;
 import org.cloudbus.cloudsim.schedulers.MipsShare;
 import org.cloudbus.cloudsim.schedulers.cloudlet.CloudletSchedulerSpaceShared;
 import org.cloudbus.cloudsim.schedulers.vm.VmSchedulerTimeShared;
-import org.cloudbus.cloudsim.selectionpolicies.VmSelectionPolicyMinimumMigrationTime;
 import org.cloudbus.cloudsim.selectionpolicies.VmSelectionPolicyMinimumUtilization;
 import org.cloudbus.cloudsim.user.User;
 import org.cloudbus.cloudsim.utilizationmodels.UtilizationModel;
@@ -125,7 +127,7 @@ import static java.util.Comparator.comparingLong;
  *
  * TODO Verify if inter-datacenter VM migration is working by default using the DatacenterBroker class.
  */
-public final class SocialMigrationExampleEAMA {
+public final class SocialMigrationExampleRR {
     /**
      * @see Datacenter#getSchedulingInterval()
      */
@@ -135,7 +137,7 @@ public final class SocialMigrationExampleEAMA {
      * The percentage of host CPU usage that trigger VM migration
      * due to under utilization (in scale from 0 to 1, where 1 is 100%).
      */
-    private static final double HOST_UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION = 0.4;
+    private static final double HOST_UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION = 0.1;
 
     /**
      * The percentage of host CPU usage that trigger VM migration
@@ -211,7 +213,7 @@ public final class SocialMigrationExampleEAMA {
     private final DatacenterBrokerFirstFitSocial broker;
 
     private final CloudSim simulation;
-    private VmAllocationPolicyMigrationEAMASocial allocationPolicy;
+    private VmAllocationPolicyMigrationStaticThreshold allocationPolicy;
     private List<Host> hostList;
     private int migrationsNumber = 0;
     private final ContinuousDistribution random;
@@ -228,7 +230,7 @@ public final class SocialMigrationExampleEAMA {
     private int overloadedHosts = 0;
 
     public static void main(String[] args) throws IOException {
-        new SocialMigrationExampleEAMA();
+        new SocialMigrationExampleRR();
     }
 
     public static double calculateSD(double numArray[])
@@ -319,7 +321,7 @@ public final class SocialMigrationExampleEAMA {
         }
     }
 
-    private SocialMigrationExampleEAMA() throws IOException {
+    private SocialMigrationExampleRR() throws IOException {
         Log.setLevel(Level.INFO);
 
         generateUsers();
@@ -363,7 +365,6 @@ public final class SocialMigrationExampleEAMA {
         double[] powerList = new double[100];
         double[] timeList = new double[100];
         double totalProcessingTime = 0;
-        double totalHangingTime = 0;
 
         for (int i=0;i<100;i++){
             var temp = meterList.get(i);
@@ -377,16 +378,14 @@ public final class SocialMigrationExampleEAMA {
             System.out.println("Host ProcessedTime/Clds Processed "+i + " : " + full_user_list.get(i).total_processing_time_self
                 /full_user_list.get(i).cloudlets_processed);
             powerList[i] = pm.getTotalPower()/full_user_list.get(i).cloudlet_count;
-            timeList[i] = full_user_list.get(i).total_hanging_time
+            timeList[i] = full_user_list.get(i).total_processing_time_self
                 /full_user_list.get(i).cloudlets_processed;
             totalProcessingTime += full_user_list.get(i).total_processing_time_self;
-            totalHangingTime += full_user_list.get(i).total_hanging_time;
         }
         System.out.println("Standard Deviation of Power/Cloudlets (Price) Sent: "+calculateSD(powerList));
         System.out.println("Standard Deviation of SelfTime/Cloudlets Processed (Reward):"+calculateSD(timeList));
         System.out.println("Total amount of overloaded hosts: "+ this.allocationPolicy.totalHostsOverloaded);
         System.out.println("Total Processing Time of Cloudlets: "+ totalProcessingTime);
-        System.out.println("Total Time Cloudlets spent in system: " + totalHangingTime);
         System.out.println("Total Cloudlets processed: " + finishedList.size());
         System.out.println("Total Cloudlets created: " + broker.getCloudletCreatedList().size());
 
@@ -402,7 +401,7 @@ public final class SocialMigrationExampleEAMA {
         for(int i=0;i<100;i++){
             dataLines.add(new String[]{String.valueOf(powerList[i]), String.valueOf(timeList[i])});
         }
-        User.createCSVFile(dataLines, "EAMAOutput.csv");
+        User.createCSVFile(dataLines, "RROutput.csv");
     }
 
 
@@ -528,14 +527,11 @@ public final class SocialMigrationExampleEAMA {
             time -> {
                 ((CloudletSocial) cloudlet).scrappyEndTime = datacenter0.getSimulation().clock();
                 ((CloudletSocial) cloudlet).calcTotalTime();
-                ((CloudletSocial) cloudlet).reallyCalcTotalTime();
                 ((CloudletSocial) cloudlet).owner.total_processing_time_self += ((CloudletSocial) cloudlet).scrappyTotalTime;
-                ((CloudletSocial) cloudlet).owner.total_hanging_time += ((CloudletSocial) cloudlet).regularTotalTime;
                 ((HostSocial)(cloudlet.getVm().getHost())).owner.cloudlets_processed += 1;
             }
         );
 
-        ((CloudletSocial) cloudlet).submissionTime = datacenter0.getSimulation().clock();
         broker.submitCloudlet(cloudlet);
         ((CloudletSocial)cloudlet).owner.cloudlet_count += 1;
     }
@@ -550,8 +546,6 @@ public final class SocialMigrationExampleEAMA {
      */
     public Cloudlet createCloudlet(Vm vm, DatacenterBroker broker, UtilizationModel cpuUtilizationModel, User owned) {
         final UtilizationModel utilizationModelFull = new UtilizationModelFull();
-        Random random3 = new Random(STATIC_SEED);
-
         final Cloudlet cloudlet =
             new CloudletSocial(CLOUDLET_LENGTH, (int)vm.getNumberOfPes(), owned)
                 .setFileSize(CLOUDLET_FILESIZE)
@@ -652,8 +646,8 @@ public final class SocialMigrationExampleEAMA {
          * become overloaded in order to trigger the migration.
          */
         this.allocationPolicy =
-            new VmAllocationPolicyMigrationEAMASocial(
-                new VmSelectionPolicyMinimumMigrationTime(),
+            new VmAllocationPolicyMigrationRoundRobinSocial(
+                new VmSelectionPolicyMinimumUtilization(),
                 HOST_OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION + 0.2);
         this.allocationPolicy.setUnderUtilizationThreshold(HOST_UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
 
